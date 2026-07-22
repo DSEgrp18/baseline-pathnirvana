@@ -288,6 +288,24 @@ def stage_train(cfg):
             return len(librosa.load(path, sr=None)[0])
     tts_dataset.get_audio_size = _get_audio_size
 
+    # bf16-safe dashboard logging: CPU autocast emits bfloat16, which numpy
+    # cannot convert -> the trainer's spectrogram plot crashes mid-training.
+    # Cast tensors to float32 before plotting (harmless on GPU fp16 too).
+    import TTS.tts.models.vits as _vits_mod
+    _orig_plot_results = _vits_mod.plot_results
+
+    def _safe_plot_results(y_hat, y, *args, **kwargs):
+        try:
+            y_hat = y_hat.float()
+        except Exception:
+            pass
+        try:
+            y = y.float()
+        except Exception:
+            pass
+        return _orig_plot_results(y_hat, y, *args, **kwargs)
+    _vits_mod.plot_results = _safe_plot_results
+
     os.makedirs(OUT, exist_ok=True)
     train_ds = BaseDatasetConfig(formatter='ljspeech', meta_file_train='metadata_train.csv', path=DATA)
     eval_ds = BaseDatasetConfig(formatter='ljspeech', meta_file_train='metadata_eval.csv', path=DATA)
