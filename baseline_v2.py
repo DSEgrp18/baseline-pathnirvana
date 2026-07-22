@@ -438,6 +438,11 @@ def main():
     p.add_argument('--batch', type=int, default=None)
     cfg = p.parse_args()
 
+    # Kaggle's "GPU T4 x2" exposes 2 GPUs; coqui-trainer refuses to auto-pick
+    # and single-GPU is simplest/most robust here. Pin to GPU 0 unless the user
+    # already set CUDA_VISIBLE_DEVICES (must happen before torch imports CUDA).
+    os.environ.setdefault('CUDA_VISIBLE_DEVICES', '0')
+
     cfg.smoke_clips, cfg.eval_clips = 100, 8
     if cfg.epochs is None:
         cfg.epochs = 3 if cfg.smoke else 1000   # full: quota-limited, resume until good
