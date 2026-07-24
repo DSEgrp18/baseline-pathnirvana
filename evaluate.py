@@ -76,6 +76,11 @@ def stage_setup(cfg):
     py = sys.executable
     sh(f'{py} -m pip -q install coqui-tts jiwer soundfile librosa "transformers==4.53.0"')
     sh(f'{py} -m pip -q install -U openai-whisper')
+    # coqui-tts downgrades torch to 2.8.0, but Kaggle keeps its torchvision/
+    # torchaudio built for a newer torch -> "operator torchvision::nms does not
+    # exist" crashes the transformers/TTS import chain. Re-pin the vision+audio
+    # libs to the pair that matches torch 2.8.0 so everything imports cleanly.
+    sh(f'{py} -m pip -q install torchvision==0.23.0 torchaudio==2.8.0')
     print('Setup complete. (UTMOS loads on demand via torch.hub.)')
 
 
