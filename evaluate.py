@@ -172,11 +172,16 @@ def stage_eval(cfg):
     for label, ck, _ in targets:
         print(f'  {label:28s} <- {ck}')
 
+    # --tag keeps separate output folders so evaluating one version, then
+    # re-running on another (e.g. 36k then 72k from a versioned dataset that
+    # can't attach both at once) does NOT overwrite the first run's results.
+    outdir = f'{OUT}/{cfg.tag}' if cfg.tag else OUT
+
     sentences = TEST_SET[:4] if cfg.smoke else TEST_SET
     asr = _load_asr(cfg)
     utmos = _load_utmos()
     use_cuda = torch.cuda.is_available()
-    os.makedirs(OUT, exist_ok=True)
+    os.makedirs(outdir, exist_ok=True)
 
     results = {}
     for label, ckpt, confp in targets:
@@ -187,7 +192,7 @@ def stage_eval(cfg):
             print('! failed to load, skipping:', e)
             continue
         sr = syn.output_sample_rate
-        sub = f'{OUT}/{label}'.replace(' ', '_')
+        sub = f'{outdir}/{label}'.replace(' ', '_')
         os.makedirs(sub, exist_ok=True)
 
         rows = []
@@ -225,9 +230,9 @@ def stage_eval(cfg):
         print(f'  --> mean WER={_fmt(agg["wer"])} CER={_fmt(agg["cer"])} '
               f'UTMOS={_fmt(agg["utmos"])} RTF={_fmt(agg["rtf"])}')
 
-    json.dump(results, open(f'{OUT}/results.json', 'w', encoding='utf-8'),
+    json.dump(results, open(f'{outdir}/results.json', 'w', encoding='utf-8'),
               ensure_ascii=False, indent=2)
-    _write_report(results)
+    _write_report(results, outdir)
 
 
 def _fmt(x):
@@ -241,13 +246,13 @@ def _aggregate(rows):
     return dict(wer=mean('wer'), cer=mean('cer'), utmos=mean('utmos'), rtf=mean('rtf'))
 
 
-def _write_report(results):
+def _write_report(results, outdir=OUT):
     # comparison CSV + a plaintext table
     lines = ['model,mean_wer,mean_cer,mean_utmos,mean_rtf,n']
     for label, r in results.items():
         lines.append(f'{label},{_c(r["wer"])},{_c(r["cer"])},'
                      f'{_c(r["utmos"])},{_c(r["rtf"])},{r["n"]}')
-    open(f'{OUT}/results.csv', 'w', encoding='utf-8').write('\n'.join(lines) + '\n')
+    open(f'{outdir}/results.csv', 'w', encoding='utf-8').write('\n'.join(lines) + '\n')
 
     # samples manifest for the human listening test
     manifest = []
@@ -255,7 +260,7 @@ def _write_report(results):
         for s in r['samples']:
             manifest.append(dict(model=label, category=s['category'],
                                  text=s['text'], wav=s['wav']))
-    json.dump(manifest, open(f'{OUT}/samples_manifest.json', 'w', encoding='utf-8'),
+    json.dump(manifest, open(f'{outdir}/samples_manifest.json', 'w', encoding='utf-8'),
               ensure_ascii=False, indent=2)
 
     print('\n================ COMPARISON ================')
@@ -264,8 +269,8 @@ def _write_report(results):
         print(f'{label[:26]:26s} {_fmt(r["wer"]):>7} {_fmt(r["cer"]):>7} '
               f'{_fmt(r["utmos"]):>7} {_fmt(r["rtf"]):>7}')
     print('============================================')
-    print(f'\nWrote: {OUT}/results.json, results.csv, samples_manifest.json')
-    print(f'Synthesized wavs under {OUT}/<model>/ — use these for the human MOS test.')
+    print(f'\nWrote: {outdir}/results.json, results.csv, samples_manifest.json')
+    print(f'Synthesized wavs under {outdir}/<model>/ — use these for the human MOS test.')
     print('\nReminder: report WER (relative), UTMOS (rough), AND human MOS together.')
 
 
@@ -284,6 +289,9 @@ def main():
                    help='comma-separated .pth paths; omit to auto-discover attached runs')
     p.add_argument('--asr-model', default='large-v3',
                    help='Whisper model for intelligibility (e.g. large-v3, medium)')
+    p.add_argument('--tag', default=None,
+                   help='subfolder for outputs so separate runs (e.g. 36k then '
+                        '72k from a versioned dataset) do not overwrite each other')
     cfg = p.parse_args()
 
     os.environ.setdefault('CUDA_VISIBLE_DEVICES', '0')  # Kaggle T4 x2 -> one GPU
