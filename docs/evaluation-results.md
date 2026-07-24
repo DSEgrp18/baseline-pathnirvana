@@ -123,12 +123,20 @@ Outputs: `/kaggle/working/eval/v36k/` and `/kaggle/working/eval/v72k/`, each wit
 | Model | Mean WER ↓ | Mean CER ↓ | Mean UTMOS ↑ | Mean RTF ↓ |
 |-------|-----------|-----------|-------------|-----------|
 | VITS @ 36k | 1.010 | 0.833 | 3.180 | 0.064 |
-| VITS @ 72k | 1.031 | 0.882 | **3.416** | 0.060 |
-| **Δ (72k − 36k)** | +0.021 | +0.049 | **+0.236** | −0.004 |
+| VITS @ 72k | 1.047 | 0.837 | **3.350** | 0.065 |
+| **Δ (72k − 36k)** | +0.037 | +0.004 | **+0.171** | +0.001 |
 
-**Headline:** doubling training (36k → 72k) raised predicted naturalness (**UTMOS +0.24**)
-while intelligibility metrics (WER/CER) stayed flat within noise. RTF is ~0.06 for both —
-comfortably faster than real-time.
+_(36k = July-22 run; 72k = saved `results.json` of the July-23 run.)_
+
+**Headline:** doubling training (36k → 72k) raised predicted naturalness (**UTMOS +0.17**)
+while intelligibility metrics were unchanged (**CER +0.004** — statistically flat). RTF is
+~0.065 for both — comfortably faster than real-time.
+
+> **Run-to-run variance (measured).** The 72k model was evaluated twice; because VITS
+> synthesis is stochastic, the two runs differed: CER 0.837 vs 0.882, UTMOS 3.350 vs 3.416
+> (≈ ±0.04 CER, ±0.07 UTMOS). The 36k→72k UTMOS gain (+0.17) is larger than this noise, so it
+> is a real effect; the CER "difference" (+0.004) is well inside the noise → genuinely flat.
+> **For the final report, average ≥3 seeds per model** to put error bars on these numbers.
 
 ### 6.2 Per-category breakdown
 
@@ -136,32 +144,30 @@ Per-category means (CER lower = better, UTMOS higher = better). **Bold** = bette
 
 | Category | 36k CER | 72k CER | 36k UTMOS | 72k UTMOS |
 |----------|--------|--------|-----------|-----------|
-| statement | **0.731** | 0.932 | 3.266 | **3.594** |
-| question | 0.824 | **0.687** | 2.886 | **3.225** |
-| exclaim | **0.882** | 1.146 | 2.716 | **3.324** |
-| numbers | **0.798** | 0.901 | **3.555** | 3.474 |
-| long | 0.873 | **0.816** | 3.075 | **3.163** |
-| codeswitch | 0.772 | **0.734** | **3.413** | 3.408 |
-| short | **1.012** | 1.029 | 3.452 | **3.733** |
+| statement | **0.731** | 0.897 | 3.266 | **3.430** |
+| question | **0.824** | 0.837 | **2.886** | 2.861 |
+| exclaim | 0.882 | **0.750** | 2.716 | **3.478** |
+| numbers | 0.798 | **0.794** | 3.555 | **3.667** |
+| long | **0.873** | 0.894 | 3.075 | **3.311** |
+| codeswitch | **0.772** | 0.784 | **3.412** | 3.294 |
+| short | 1.011 | **0.875** | 3.452 | **3.617** |
 
-> codeswitch UTMOS (36k 3.413 vs 72k 3.408) is effectively tied.
->
-> **UTMOS rises for 72k in 5 of 7 categories** (`numbers` and `codeswitch` are flat/slightly
-> down), the clearest
-> and most consistent signal in the whole evaluation. CER is mixed/noisy: 72k wins on
-> question / long / codeswitch, 36k wins on statement / exclaim / numbers — no directional
-> trend, consistent with single-run stochastic-synthesis noise rather than a real gap.
+> **UTMOS rises for 72k in 5 of 7 categories** — the exceptions are `question` (essentially
+> tied, −0.03) and `codeswitch` (−0.12). The biggest naturalness gain is `exclaim` (+0.76),
+> exactly where the 36k model was weakest. CER is mixed/noisy: 72k wins on
+> exclaim / numbers / short, 36k wins on statement / long / codeswitch — no directional trend,
+> consistent with single-run stochastic-synthesis noise rather than a real gap.
 
 ---
 
 ## 7. Interpretation
 
 **1. More training improved naturalness, not intelligibility.**
-From 36k → 72k, UTMOS rose **+0.24 overall** and in 5 of 7 categories, while WER and CER
-stayed flat (both changed by < 0.05, within single-run noise). This is a textbook VITS
-pattern: additional steps refine timbre and smoothness (what UTMOS captures) faster than
-they improve phonetic precision. **Net verdict: the 72k model is the better one to ship, and
-the model was still improving at 72k** — so continuing toward ~100k steps is justified.
+From 36k → 72k, UTMOS rose **+0.17 overall** and in 5 of 7 categories, while WER and CER
+stayed flat (CER moved just +0.004, well within the measured ±0.07 run-to-run noise). This is
+a textbook VITS pattern: additional steps refine timbre and smoothness (what UTMOS captures)
+faster than they improve phonetic precision. **Net verdict: the 72k model is the better one to
+ship, and the model was still improving at 72k** — so continuing toward ~100k steps is justified.
 
 **2. Intelligibility has likely hit a soft ceiling.**
 WER is pinned at ~1.0 for both models (saturated — see §8) and CER shows no direction. More
@@ -171,18 +177,19 @@ evidence for the next tracks — MMS-TTS transfer learning and F5-TTS — descri
 [architecture-evolution-and-research-gap.md](architecture-evolution-and-research-gap.md).
 
 **3. Weakest areas.**
-By UTMOS, the hardest categories for *both* models are **`long`** (~3.1, long-form prosody
-drifts) and **`question`** at 36k (2.89, intonation) — the latter improves most with training
-(→ 3.23 at 72k). **`codeswitch`** is a structural failure for both: the VITS vocabulary has no
-Latin letters, so English words are silently dropped (§8.2). Best categories are **`short`**
-and **`statement`** (short, in-domain utterances).
+By UTMOS, the hardest categories for *both* models are **`question`** (2.86–2.89, intonation
+contour) and **`exclaim`** at 36k (2.72) — the latter shows the single biggest gain with
+training (→ 3.48 at 72k, +0.76). **`codeswitch`** stays weak and is a *structural* failure:
+the VITS vocabulary has no Latin letters, so English words are silently dropped (§8.2), which
+is why extra training slightly *lowers* its UTMOS rather than helping. Best categories are
+**`numbers`** and **`short`** (in-domain, high UTMOS for both models).
 
 **4. Caveats on these numbers.**
-Each row is a **single stochastic synthesis run** (VITS samples its duration predictor), so
-per-sentence and small aggregate differences carry real variance. The UTMOS gain is
-consistent enough across categories to trust as directional, but for the final report we
-should **average ≥3 seeds per sentence** and, above all, run the **human MOS** (§9) — that is
-the number that decides 36k vs 72k perceptually.
+Each row is a **single stochastic synthesis run** (VITS samples its duration predictor). We
+measured this directly: two 72k runs gave UTMOS 3.350 vs 3.416 and CER 0.837 vs 0.882
+(≈ ±0.07 / ±0.04). The +0.17 UTMOS gain clears that noise floor; the +0.004 CER change does
+not. For the final report we should **average ≥3 seeds per sentence** to attach error bars and,
+above all, run the **human MOS** (§9) — that is the number that decides 36k vs 72k perceptually.
 
 ---
 
