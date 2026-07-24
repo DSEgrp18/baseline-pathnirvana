@@ -85,6 +85,23 @@ def stage_setup(cfg):
 
 
 # ---------------------------------------------------------------------------
+def _label_for(d):
+    """Compact, DISTINCT label from a run dir's path. Warm-restart runs often
+    reuse the same folder name AND the same checkpoint step (the counter resets
+    on restore), so the only reliable distinguisher is the attached-dataset
+    folder (e.g. vits-si-ckpt-36k vs vits-si-ckpt-72k). Drop the run timestamp
+    and generic wrappers, keep the last couple of meaningful path parts."""
+    rel = d
+    for root in ('/kaggle/input/', f'{WORK}/'):
+        if d.startswith(root):
+            rel = d[len(root):]
+            break
+    parts = [p for p in rel.split('/')
+             if p and not p.startswith('vits_sinhala-') and p not in ('datasets',)]
+    label = '-'.join(parts[-2:]) if parts else os.path.basename(d)
+    return label[:32]
+
+
 def _discover(cfg):
     """Return [(label, ckpt_path, config_path)]. Explicit --checkpoints wins;
     else the latest checkpoint of each distinct run folder that has a config."""
@@ -107,8 +124,12 @@ def _discover(cfg):
             latest = f'{d}/best_model.pth'
         else:
             continue
-        # label by the parent dataset/run folder so 36k vs 72k are distinguishable
-        label = os.path.basename(os.path.dirname(d)) or os.path.basename(d)
+        label = _label_for(d)
+        # guarantee uniqueness so two runs never collide into one report row
+        base, seen = label, {l for l, _, _ in out}
+        n = 2
+        while label in seen:
+            label, n = f'{base}#{n}', n + 1
         out.append((label, latest, f'{d}/config.json'))
     return out
 
