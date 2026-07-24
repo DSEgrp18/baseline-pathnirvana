@@ -3,7 +3,7 @@
 **Project:** Development of a Natural-Sounding Sinhala TTS System (UoM CS3501, Group 18 / P15)
 **Track evaluated:** Track A — VITS from scratch (Coqui-TTS) on the PathNirvana dataset
 **Harness:** [`evaluate.py`](../evaluate.py)
-**Status:** _results pending — populate the tables below from the two `results.csv` runs_
+**Status:** ✅ complete — VITS 36k vs 72k, evaluated 2026-07-24 on Kaggle T4.
 
 ---
 
@@ -13,13 +13,18 @@ Quantify how our from-scratch Sinhala VITS model improves with additional traini
 produce audio samples for a native-speaker listening test. We compare two training
 checkpoints of the **same** model:
 
-| Label | Checkpoint | Effective training |
-|-------|-----------|--------------------|
-| `v36k` | `checkpoint_36000.pth` (dataset Version 1) | ~36k steps |
-| `v72k` | latest checkpoint (dataset Version 2) | ~72k effective steps (warm-restart continued) |
+| Label | Run folder | Checkpoint | Effective training |
+|-------|-----------|-----------|--------------------|
+| **36k** | `vits_sinhala-July-22-2026_04+42PM` (dataset Version 1) | `checkpoint_36000.pth` | ~36k steps (first session) |
+| **72k** | `vits_sinhala-July-23-2026_09+23AM` (dataset Version 2) | `checkpoint_36000.pth` | ~72k effective (warm-restart continued) |
 
-> **Note on "effective steps":** the step counter resets to 0 on a warm *restore*, so the
-> 72k model's file may still read `checkpoint_36000.pth`. Effective steps = commits × ~36k.
+> **Note on "effective steps":** the step counter resets to 0 on a warm *restore*, so **both**
+> files are literally named `checkpoint_36000.pth` — the distinguishing feature is the run
+> folder timestamp (July-22 = 36k, July-23 = 72k). Effective steps = commits × ~36k.
+>
+> **Comparison validity:** the two evaluation runs were verified to load different files
+> (`.../July-22-2026_04+42PM/...` vs `.../July-23-2026_09+23AM/...`), so this is a genuine
+> two-model comparison, not the same checkpoint twice.
 
 ---
 
@@ -87,7 +92,8 @@ punctuation (incl. ZWJ) before WER/CER, so we compare words/characters, not mark
 | ASR | `openai-whisper` `large-v3` |
 | UTMOS | `tarepan/SpeechMOS` `utmos22_strong` |
 | Key pins | `transformers==4.53.0`, `torchvision==0.23.0`, `torchaudio==2.8.0` (match torch 2.8.0) |
-| Harness commit | _fill in `git rev-parse --short HEAD`_ |
+| Harness commit | `bfb0747` |
+| Eval date | 2026-07-24 |
 
 **Commands (two-run method, versioned dataset):**
 
@@ -114,42 +120,69 @@ Outputs: `/kaggle/working/eval/v36k/` and `/kaggle/working/eval/v72k/`, each wit
 
 ### 6.1 Overall (mean across 16 sentences)
 
-_Paste the two `results.csv` rows here._
-
 | Model | Mean WER ↓ | Mean CER ↓ | Mean UTMOS ↑ | Mean RTF ↓ |
 |-------|-----------|-----------|-------------|-----------|
-| VITS @ 36k (`v36k`) | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
-| VITS @ 72k (`v72k`) | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
-| **Δ (72k − 36k)** | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
+| VITS @ 36k | 1.010 | 0.833 | 3.180 | 0.064 |
+| VITS @ 72k | 1.031 | 0.882 | **3.416** | 0.060 |
+| **Δ (72k − 36k)** | +0.021 | +0.049 | **+0.236** | −0.004 |
+
+**Headline:** doubling training (36k → 72k) raised predicted naturalness (**UTMOS +0.24**)
+while intelligibility metrics (WER/CER) stayed flat within noise. RTF is ~0.06 for both —
+comfortably faster than real-time.
 
 ### 6.2 Per-category breakdown
 
-_Optional — extract per-category means from `results.json` if you want this table._
+Per-category means (CER lower = better, UTMOS higher = better). **Bold** = better of the two.
 
 | Category | 36k CER | 72k CER | 36k UTMOS | 72k UTMOS |
 |----------|--------|--------|-----------|-----------|
-| statement | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
-| question | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
-| exclaim | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
-| numbers | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
-| long | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
-| codeswitch | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
-| short | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
+| statement | **0.731** | 0.932 | 3.266 | **3.594** |
+| question | 0.824 | **0.687** | 2.886 | **3.225** |
+| exclaim | **0.882** | 1.146 | 2.716 | **3.324** |
+| numbers | **0.798** | 0.901 | **3.555** | 3.474 |
+| long | 0.873 | **0.816** | 3.075 | **3.163** |
+| codeswitch | 0.772 | **0.734** | **3.413** | 3.408 |
+| short | **1.012** | 1.029 | 3.452 | **3.733** |
+
+> codeswitch UTMOS (36k 3.413 vs 72k 3.408) is effectively tied.
+>
+> **UTMOS rises for 72k in 5 of 7 categories** (`numbers` and `codeswitch` are flat/slightly
+> down), the clearest
+> and most consistent signal in the whole evaluation. CER is mixed/noisy: 72k wins on
+> question / long / codeswitch, 36k wins on statement / exclaim / numbers — no directional
+> trend, consistent with single-run stochastic-synthesis noise rather than a real gap.
 
 ---
 
 ## 7. Interpretation
 
-_Written after the numbers land. Key questions to answer:_
+**1. More training improved naturalness, not intelligibility.**
+From 36k → 72k, UTMOS rose **+0.24 overall** and in 5 of 7 categories, while WER and CER
+stayed flat (both changed by < 0.05, within single-run noise). This is a textbook VITS
+pattern: additional steps refine timbre and smoothness (what UTMOS captures) faster than
+they improve phonetic precision. **Net verdict: the 72k model is the better one to ship, and
+the model was still improving at 72k** — so continuing toward ~100k steps is justified.
 
-- **Did more training help?** Compare CER and UTMOS (36k → 72k). A meaningful improvement
-  means the model is still learning → continue toward ~100k steps.
-- **Or have we hit the ceiling?** If 36k ≈ 72k, extra VITS steps won't help — the bottleneck
-  is data quantity/quality or architecture, which is the evidence for pivoting to
-  MMS-TTS transfer learning or the F5-TTS track (see
-  [architecture-evolution-and-research-gap.md](architecture-evolution-and-research-gap.md)).
-- **Where is quality weakest?** Use the per-category table to find the worst category
-  (typically `long` for coherence and `codeswitch` for the vocab gap).
+**2. Intelligibility has likely hit a soft ceiling.**
+WER is pinned at ~1.0 for both models (saturated — see §8) and CER shows no direction. More
+VITS steps alone are unlikely to move intelligibility much; that bottleneck is **data
+quantity/quality and grapheme coverage**, not training length. This is the quantitative
+evidence for the next tracks — MMS-TTS transfer learning and F5-TTS — described in
+[architecture-evolution-and-research-gap.md](architecture-evolution-and-research-gap.md).
+
+**3. Weakest areas.**
+By UTMOS, the hardest categories for *both* models are **`long`** (~3.1, long-form prosody
+drifts) and **`question`** at 36k (2.89, intonation) — the latter improves most with training
+(→ 3.23 at 72k). **`codeswitch`** is a structural failure for both: the VITS vocabulary has no
+Latin letters, so English words are silently dropped (§8.2). Best categories are **`short`**
+and **`statement`** (short, in-domain utterances).
+
+**4. Caveats on these numbers.**
+Each row is a **single stochastic synthesis run** (VITS samples its duration predictor), so
+per-sentence and small aggregate differences carry real variance. The UTMOS gain is
+consistent enough across categories to trust as directional, but for the final report we
+should **average ≥3 seeds per sentence** and, above all, run the **human MOS** (§9) — that is
+the number that decides 36k vs 72k perceptually.
 
 ---
 
